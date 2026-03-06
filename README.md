@@ -2,7 +2,7 @@
 
 A local, self-hosted portfolio tracker for Indian investors. Track stocks, ETFs, gold ETFs, mutual funds, crypto, Provident Fund contributions, and Fixed Deposits — all in one place with live prices and historical charts.
 
-![Python](https://img.shields.io/badge/Python-3.8+-blue) ![Flask](https://img.shields.io/badge/Flask-Backend-green) ![License](https://img.shields.io/badge/License-MIT-yellow)
+![Python](https://img.shields.io/badge/Python-3.8+-blue) ![Flask](https://img.shields.io/badge/Flask-Backend-green)
 
 ## Features
 
@@ -100,7 +100,3 @@ All portfolio data is stored locally in `portfolio.json`. No data is sent to any
 - **Tax reporting** — Capital gains summary for ITR filing (STCG/LTCG breakdowns)
 - **Dividend tracking** — Record and track dividend income from stocks and mutual funds
 - **Graph Filters** - More filters on graphs to view performance over the past year, month, etc.
-
-## License
-
-MIT
