@@ -1,6 +1,6 @@
 # Portfolio Tracker
 
-A local, self-hosted portfolio tracker for Indian investors. Track stocks, ETFs, gold ETFs, mutual funds, crypto, Provident Fund contributions, and Fixed Deposits — all in one place with live prices and historical charts.
+A local, self-hosted portfolio tracker for investors that don't want online portfolio trackers to sell their financial data. Track stocks, ETFs, gold ETFs, mutual funds, crypto, Provident Fund contributions, and Fixed Deposits — all in one place with live prices and historical charts.
 
 ![Python](https://img.shields.io/badge/Python-3.8+-blue) ![Flask](https://img.shields.io/badge/Flask-Backend-green)
 
@@ -77,7 +77,7 @@ The app runs at `http://localhost:5000`.
 
 ### Importing Zerodha Trades
 
-1. Download your tradebook from Zerodha Console (separate CSVs for EQ and MF segments)
+1. Download your tradebook(s) from Zerodha Console (separate CSVs for EQ and MF segments; tradebooks have 365 day limits so you'll need to download multiple)
 2. Click the **Import** button in the app
 3. Select one or more CSV files and import
 4. Duplicates are automatically skipped based on trade IDs
@@ -90,13 +90,9 @@ All portfolio data is stored locally in `portfolio.json`. No data is sent to any
 
 - **Automated SIP tracking** — Define SIP schedules (amount, frequency, start date) and auto-generate recurring transactions
 - **PF auto-contributions** — Set up monthly PF contribution schedules that automatically add entries each month
-- **FD maturity alerts** — Notifications when FDs are approaching maturity
 - **Benchmarking** — Compare portfolio returns against Nifty 50, Sensex, or other indices
 - **XIRR calculation** — Annualized returns accounting for irregular cash flows
 - **Asset rebalancing suggestions** — Target allocation vs actual allocation with rebalance recommendations
 - **Export** — Download portfolio data as CSV/Excel
-- **Multi-portfolio support** — Track separate portfolios (e.g., personal, family)
-- **Groww/Kite API integration** — Auto-sync trades from broker accounts
-- **Tax reporting** — Capital gains summary for ITR filing (STCG/LTCG breakdowns)
 - **Dividend tracking** — Record and track dividend income from stocks and mutual funds
 - **Graph Filters** - More filters on graphs to view performance over the past year, month, etc.

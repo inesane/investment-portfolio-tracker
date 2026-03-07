@@ -147,7 +147,14 @@
   <div class="charts-grid">
     <div class="chart-card">
       <h3>Allocation Breakdown</h3>
+      <div class="chart-controls" style="margin-bottom:8px;">
+        <div class="toggle-group">
+          <button class="toggle-btn active" onclick="setAllocView('category', this)">Category</button>
+          <button class="toggle-btn" onclick="setAllocView('detailed', this)">Detailed</button>
+        </div>
+      </div>
       <canvas id="pieChart"></canvas>
+      <button id="pieBackBtn" style="display:none;margin-top:8px;background:var(--surface);color:var(--muted);border:1px solid var(--border);padding:4px 12px;cursor:pointer;font-size:0.8rem;border-radius:4px;" onclick="pieDrillBack()">&larr; Back to Categories</button>
     </div>
     <div class="chart-card" style="position:relative;">
       <h3>Portfolio History</h3>
@@ -442,6 +449,19 @@ const CATEGORY_LABELS = {
   stock: 'Stocks', etf: 'ETFs', gold_etf: 'Gold ETFs',
   mutual_fund: 'Mutual Funds', crypto: 'Crypto', pf: 'Provident Fund', fd: 'Fixed Deposits'
 };
+const BROAD_CATEGORY_MAP = {
+  stock: 'equity', etf: 'equity', mutual_fund: 'equity',
+  gold_etf: 'commodities', crypto: 'crypto', pf: 'debt', fd: 'debt'
+};
+const BROAD_CATEGORY_LABELS = {
+  equity: 'Equity', debt: 'Debt', commodities: 'Commodities', crypto: 'Crypto'
+};
+const BROAD_CATEGORY_COLORS = {
+  equity: '#3b82f6', debt: '#22c55e', commodities: '#eab308', crypto: '#f97316'
+};
+let allocView = 'category';
+let _lastPieInvestments = [];
+let pieDrillCategory = null;
 
 function fmt(val) {
   if (currency === 'USD') val = val / usdRate;
@@ -490,29 +510,73 @@ function renderPortfolio() {
   renderTable(d.investments);
 }
 
+const DETAILED_ORDER = ['stock', 'etf', 'mutual_fund', 'gold_etf', 'crypto', 'pf', 'fd'];
+const CATEGORY_ORDER = ['equity', 'commodities', 'crypto', 'debt'];
+
 function renderPieChart(investments) {
-  const catTotals = {};
-  for (const inv of investments) {
-    const cat = inv.category || inv.type;
-    catTotals[cat] = (catTotals[cat] || 0) + (inv.current_value || 0);
+  _lastPieInvestments = investments;
+  const totals = {};
+  let labelMap, colorMap, order, isDrillDown = false;
+
+  if (pieDrillCategory && allocView === 'category') {
+    // Drill-down: show detailed types within the selected broad category
+    isDrillDown = true;
+    labelMap = CATEGORY_LABELS;
+    colorMap = CATEGORY_COLORS;
+    order = DETAILED_ORDER.filter(t => BROAD_CATEGORY_MAP[t] === pieDrillCategory);
+    for (const inv of investments) {
+      const type = inv.category || inv.type;
+      if (BROAD_CATEGORY_MAP[type] === pieDrillCategory) {
+        totals[type] = (totals[type] || 0) + (inv.current_value || 0);
+      }
+    }
+  } else if (allocView === 'category') {
+    labelMap = BROAD_CATEGORY_LABELS;
+    colorMap = BROAD_CATEGORY_COLORS;
+    order = CATEGORY_ORDER;
+    for (const inv of investments) {
+      const type = inv.category || inv.type;
+      const key = BROAD_CATEGORY_MAP[type] || type;
+      totals[key] = (totals[key] || 0) + (inv.current_value || 0);
+    }
+  } else {
+    labelMap = CATEGORY_LABELS;
+    colorMap = CATEGORY_COLORS;
+    order = DETAILED_ORDER;
+    for (const inv of investments) {
+      const type = inv.category || inv.type;
+      totals[type] = (totals[type] || 0) + (inv.current_value || 0);
+    }
   }
 
-  const labels = [], data = [], colors = [];
-  for (const [cat, val] of Object.entries(catTotals)) {
-    if (val <= 0) continue;
-    labels.push(CATEGORY_LABELS[cat] || cat);
+  const keys = [], labels = [], data = [], colors = [];
+  for (const key of order) {
+    const val = totals[key];
+    if (!val || val <= 0) continue;
+    keys.push(key);
+    labels.push(labelMap[key] || key);
     data.push(currency === 'USD' ? val / usdRate : val);
-    colors.push(CATEGORY_COLORS[cat] || '#666');
+    colors.push(colorMap[key] || '#666');
   }
 
   const ctx = document.getElementById('pieChart').getContext('2d');
   if (pieChart) pieChart.destroy();
+  document.getElementById('pieBackBtn').style.display = isDrillDown ? '' : 'none';
   if (data.length === 0) { return; }
   pieChart = new Chart(ctx, {
     type: 'doughnut',
     data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
     options: {
       responsive: true,
+      onClick: function(evt, elements) {
+        if (allocView !== 'category' || isDrillDown || elements.length === 0) return;
+        const idx = elements[0].index;
+        pieDrillCategory = keys[idx];
+        renderPieChart(_lastPieInvestments);
+      },
+      onHover: function(evt, elements) {
+        evt.native.target.style.cursor = (allocView === 'category' && !isDrillDown && elements.length > 0) ? 'pointer' : 'default';
+      },
       plugins: {
         legend: { position: 'bottom', labels: { color: '#9ca3af', font: { size: 11 } } },
         tooltip: {
@@ -528,6 +592,19 @@ function renderPieChart(investments) {
       }
     }
   });
+}
+
+function pieDrillBack() {
+  pieDrillCategory = null;
+  renderPieChart(_lastPieInvestments);
+}
+
+function setAllocView(view, btn) {
+  allocView = view;
+  pieDrillCategory = null;
+  btn.parentElement.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderPieChart(_lastPieInvestments);
 }
 
 function isCurrentInvestment(inv) {
