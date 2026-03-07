@@ -90,11 +90,12 @@ All portfolio data is stored locally in `portfolio.json`. No data is sent to any
 
 ## Future Plans
 
-- **Automated SIP tracking** — Define SIP schedules (amount, frequency, start date) and auto-generate recurring transactions
+- **Automated SIP tracking** — Define SIP schedules (amount, frequency, date, start date) and auto-generate recurring transactions
 - **PF auto-contributions** — Set up monthly PF contribution schedules that automatically add entries each month
 - **Benchmarking** — Compare portfolio returns against Nifty 50, Sensex, or other indices
 - **XIRR calculation** — Annualized returns accounting for irregular cash flows
 - **Asset rebalancing suggestions** — Target allocation vs actual allocation with rebalance recommendations
 - **Export** — Download portfolio data as CSV/Excel
-- **Dividend tracking** — Record and track dividend income from stocks and mutual funds
 - **Graph Filters** - More filters on graphs to view performance over the past year, month, etc.
+- **More Investments** - Real Estates, US investments (most probably in a separate sheet/tab)
+- **Dividend tracking** — Record and track dividend income from stocks and mutual funds
