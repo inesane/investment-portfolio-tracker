@@ -133,7 +133,8 @@
         <label><input type="radio" name="currency" value="USD" onchange="setCurrency('USD')"> USD</label>
       </span>
       <button class="btn" onclick="refreshPrices()" id="refreshBtn">Refresh Prices</button>
-      <button class="btn" onclick="openImportModal()">Import CSV</button>
+      <button class="btn" onclick="openImportModal()">Import</button>
+      <button class="btn" onclick="openRecurringModal()">Recurring</button>
       <button class="btn btn-primary" onclick="openAddModal()">+ Add Investment</button>
     </div>
   </header>
@@ -411,22 +412,74 @@
   </div>
 </div>
 
-<!-- Import CSV Modal -->
+<!-- Import Modal -->
 <div class="modal-overlay" id="importModal">
   <div class="modal">
-    <h2>Import Zerodha Tradebook</h2>
-    <p style="font-size:0.85rem;color:var(--muted);margin-bottom:16px;">
+    <h2>Import Data</h2>
+    <div class="form-group">
+      <label>Import Type</label>
+      <select id="importType" onchange="toggleImportType()">
+        <option value="zerodha">Zerodha Tradebook (CSV)</option>
+        <option value="pf">EPFO Passbook (PDF)</option>
+      </select>
+    </div>
+    <p id="importDesc" style="font-size:0.85rem;color:var(--muted);margin-bottom:16px;">
       Upload your Zerodha tradebook CSV files. You can upload multiple files at once (EQ and MF segments).
-      Trades will be merged with existing investments automatically.
     </p>
     <div class="form-group">
-      <label>Select CSV file(s)</label>
+      <label>Select file(s)</label>
       <input type="file" id="importFiles" accept=".csv" multiple style="padding:8px;">
     </div>
     <div id="importStatus" style="display:none;font-size:0.85rem;margin-bottom:12px;"></div>
     <div class="form-actions">
       <button class="btn" onclick="closeImportModal()">Cancel</button>
       <button class="btn btn-primary" onclick="submitImport()" id="importBtn">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Recurring / Bulk Add Modal -->
+<div class="modal-overlay" id="recurringModal">
+  <div class="modal" style="max-width:600px;">
+    <h2>Recurring Investments</h2>
+
+    <!-- Active Schedules -->
+    <div id="scheduleList" style="margin-bottom:16px;"></div>
+
+    <hr style="border-color:var(--border);margin:16px 0;">
+    <h3 style="font-size:0.95rem;margin-bottom:12px;">Add / Bulk Generate</h3>
+    <p style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;">
+      Set up a recurring schedule or generate past entries in bulk. Schedules auto-generate entries each time you open the app.
+    </p>
+    <div class="form-group">
+      <label>Investment</label>
+      <select id="recurInvestment" onchange="onRecurInvestmentChange()"></select>
+    </div>
+    <div class="form-group">
+      <label>Amount per month</label>
+      <input type="number" id="recurAmount" step="0.01">
+    </div>
+    <div class="form-group" id="recurBuyPriceGroup" style="display:none;">
+      <label>Buy price per unit (leave empty to skip)</label>
+      <input type="number" id="recurBuyPrice" step="0.01" placeholder="Optional — price per unit">
+    </div>
+    <div class="form-group">
+      <label>Day of month</label>
+      <input type="number" id="recurDay" value="1" min="1" max="28">
+    </div>
+    <div class="form-group">
+      <label>Start date</label>
+      <input type="text" id="recurStart" placeholder="YYYY-MM-DD">
+    </div>
+    <div class="form-group">
+      <label>End date (leave empty for ongoing)</label>
+      <input type="text" id="recurEnd" placeholder="YYYY-MM-DD">
+    </div>
+    <div id="recurStatus" style="display:none;font-size:0.85rem;margin-bottom:12px;"></div>
+    <div class="form-actions">
+      <button class="btn" onclick="closeRecurringModal()">Close</button>
+      <button class="btn" onclick="submitRecurring()" id="recurBtn">Generate Past Entries</button>
+      <button class="btn btn-primary" onclick="saveSchedule()" id="schedBtn">Save as Recurring</button>
     </div>
   </div>
 </div>
@@ -658,8 +711,9 @@ function renderTable(investments) {
                      inv.type === 'pf' ? (inv.contributions||[]).length + ' contributions' :
                      parseFloat(inv.total_quantity || 0).toFixed(2);
 
+    const schedBadge = inv.schedule ? ' <span style="font-size:0.65rem;background:#22c55e;color:#000;padding:1px 5px;border-radius:3px;vertical-align:middle;">recurring</span>' : '';
     html += `<tr class="expandable" onclick="toggleTxns('${inv.id}')">
-      <td><strong>${inv.name}</strong></td>
+      <td><strong>${inv.name}</strong>${schedBadge}</td>
       <td><span class="type-badge type-${inv.type}">${(CATEGORY_LABELS[inv.type]||inv.type)}</span></td>
       <td>${qtyLabel}</td>
       <td>${fmtDetailed(inv.invested)}</td>
@@ -1219,11 +1273,26 @@ async function submitEditInvestment() {
   loadHistorical();
 }
 
-// --- Import CSV Modal ---
+// --- Import Modal ---
+function toggleImportType() {
+  var t = document.getElementById('importType').value;
+  var desc = document.getElementById('importDesc');
+  var fileInput = document.getElementById('importFiles');
+  if (t === 'pf') {
+    desc.textContent = 'Upload your EPFO passbook PDF files. Download from EPFO Member Portal. Multiple files supported.';
+    fileInput.accept = '.pdf';
+  } else {
+    desc.textContent = 'Upload your Zerodha tradebook CSV files. You can upload multiple files at once (EQ and MF segments).';
+    fileInput.accept = '.csv';
+  }
+}
+
 function openImportModal() {
   document.getElementById('importModal').classList.add('show');
   document.getElementById('importFiles').value = '';
   document.getElementById('importStatus').style.display = 'none';
+  document.getElementById('importType').value = 'zerodha';
+  toggleImportType();
 }
 
 function closeImportModal() {
@@ -1234,6 +1303,7 @@ async function submitImport() {
   var files = document.getElementById('importFiles').files;
   if (files.length === 0) return;
 
+  var importType = document.getElementById('importType').value;
   var btn = document.getElementById('importBtn');
   var status = document.getElementById('importStatus');
   btn.innerHTML = '<span class="spinner"></span> Importing...';
@@ -1245,19 +1315,37 @@ async function submitImport() {
   var totalImported = 0;
   var errors = [];
 
-  for (var i = 0; i < files.length; i++) {
+  if (importType === 'pf') {
     var formData = new FormData();
-    formData.append('file', files[i]);
+    for (var i = 0; i < files.length; i++) {
+      formData.append('file', files[i]);
+    }
     try {
-      var resp = await fetch('/api/import', { method: 'POST', body: formData });
+      var resp = await fetch('/api/import/pf', { method: 'POST', body: formData });
       var data = await resp.json();
       if (data.status === 'ok') {
-        totalImported += data.imported;
+        totalImported = data.imported;
       } else {
-        errors.push(files[i].name + ': ' + (data.message || 'Unknown error'));
+        errors.push(data.message || 'Unknown error');
       }
     } catch(e) {
-      errors.push(files[i].name + ': ' + e.message);
+      errors.push(e.message);
+    }
+  } else {
+    for (var i = 0; i < files.length; i++) {
+      var formData = new FormData();
+      formData.append('file', files[i]);
+      try {
+        var resp = await fetch('/api/import', { method: 'POST', body: formData });
+        var data = await resp.json();
+        if (data.status === 'ok') {
+          totalImported += data.imported;
+        } else {
+          errors.push(files[i].name + ': ' + (data.message || 'Unknown error'));
+        }
+      } catch(e) {
+        errors.push(files[i].name + ': ' + e.message);
+      }
     }
   }
 
@@ -1269,11 +1357,199 @@ async function submitImport() {
     status.textContent = 'Errors: ' + errors.join('; ');
   } else {
     status.style.color = 'var(--green)';
-    status.textContent = 'Imported ' + totalImported + ' trades successfully.';
+    status.textContent = 'Imported ' + totalImported + ' entries successfully.';
     setTimeout(function() { closeImportModal(); }, 1500);
   }
 
   await loadPortfolio();
+  loadHistorical();
+}
+
+// --- Recurring / Bulk Add Modal ---
+function renderScheduleList() {
+  var container = document.getElementById('scheduleList');
+  if (!portfolioData || !portfolioData.investments) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:0.85rem;">No investments yet.</p>';
+    return;
+  }
+
+  var scheduled = portfolioData.investments.filter(function(inv) { return inv.schedule; });
+  if (scheduled.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:0.85rem;">No active recurring schedules. Set one up below.</p>';
+    return;
+  }
+
+  var html = '<table style="width:100%;font-size:0.85rem;"><thead><tr style="color:var(--muted);text-align:left;">' +
+    '<th style="padding:4px 8px;">Investment</th><th style="padding:4px 8px;">Amount</th><th style="padding:4px 8px;">Day</th>' +
+    '<th style="padding:4px 8px;">Start</th><th style="padding:4px 8px;">End</th><th style="padding:4px 8px;"></th></tr></thead><tbody>';
+
+  for (var inv of scheduled) {
+    var s = inv.schedule;
+    var sym = currency === 'INR' ? '\u20B9' : '$';
+    var amt = currency === 'USD' ? (parseFloat(s.amount) / usdRate) : parseFloat(s.amount);
+    html += '<tr>' +
+      '<td style="padding:4px 8px;">' + inv.name + '</td>' +
+      '<td style="padding:4px 8px;">' + sym + amt.toLocaleString('en-IN', {maximumFractionDigits:0}) + '/mo</td>' +
+      '<td style="padding:4px 8px;">' + s.day + '</td>' +
+      '<td style="padding:4px 8px;">' + s.start_date + '</td>' +
+      '<td style="padding:4px 8px;">' + (s.end_date || 'Ongoing') + '</td>' +
+      '<td style="padding:4px 8px;">' +
+        '<button class="btn btn-sm" onclick="editSchedule(\'' + inv.id + '\')">Edit</button> ' +
+        '<button class="btn btn-sm btn-danger" onclick="deleteSchedule(\'' + inv.id + '\')">Del</button>' +
+      '</td></tr>';
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function openRecurringModal() {
+  document.getElementById('recurringModal').classList.add('show');
+  document.getElementById('recurStatus').style.display = 'none';
+  renderScheduleList();
+  // Populate investment dropdown with PF and market investments
+  var sel = document.getElementById('recurInvestment');
+  sel.innerHTML = '';
+  if (portfolioData && portfolioData.investments) {
+    for (var inv of portfolioData.investments) {
+      if (['pf', 'stock', 'etf', 'gold_etf', 'mutual_fund', 'crypto'].includes(inv.type)) {
+        var opt = document.createElement('option');
+        opt.value = inv.id;
+        opt.textContent = inv.name + ' (' + (CATEGORY_LABELS[inv.type] || inv.type) + ')';
+        opt.dataset.type = inv.type;
+        sel.appendChild(opt);
+      }
+    }
+  }
+  onRecurInvestmentChange();
+  flatpickr('#recurStart', { dateFormat: 'Y-m-d', allowInput: true, theme: 'dark' });
+  flatpickr('#recurEnd', { dateFormat: 'Y-m-d', allowInput: true, theme: 'dark' });
+}
+
+function onRecurInvestmentChange() {
+  var sel = document.getElementById('recurInvestment');
+  var opt = sel.options[sel.selectedIndex];
+  var type = opt ? opt.dataset.type : '';
+  document.getElementById('recurBuyPriceGroup').style.display = (type !== 'pf') ? 'block' : 'none';
+}
+
+function closeRecurringModal() {
+  document.getElementById('recurringModal').classList.remove('show');
+}
+
+function editSchedule(invId) {
+  var inv = portfolioData.investments.find(function(i) { return i.id === invId; });
+  if (!inv || !inv.schedule) return;
+  // Pre-fill the form with existing schedule
+  document.getElementById('recurInvestment').value = invId;
+  onRecurInvestmentChange();
+  document.getElementById('recurAmount').value = inv.schedule.amount;
+  document.getElementById('recurDay').value = inv.schedule.day;
+  document.getElementById('recurStart').value = inv.schedule.start_date;
+  document.getElementById('recurEnd').value = inv.schedule.end_date || '';
+  if (inv.schedule.buy_price) {
+    document.getElementById('recurBuyPrice').value = inv.schedule.buy_price;
+  }
+}
+
+async function deleteSchedule(invId) {
+  if (!confirm('Remove recurring schedule?')) return;
+  await fetch('/api/investment/' + invId + '/schedule', { method: 'DELETE' });
+  await loadPortfolio();
+  renderScheduleList();
+}
+
+async function saveSchedule() {
+  var sel = document.getElementById('recurInvestment');
+  var invId = sel.value;
+  if (!invId) return;
+
+  var amount = document.getElementById('recurAmount').value;
+  var day = document.getElementById('recurDay').value;
+  var startDate = document.getElementById('recurStart').value;
+  var endDate = document.getElementById('recurEnd').value;
+  var buyPrice = document.getElementById('recurBuyPrice').value;
+
+  if (!amount || !startDate) {
+    alert('Amount and start date are required');
+    return;
+  }
+
+  var status = document.getElementById('recurStatus');
+  status.style.display = 'block';
+  status.style.color = 'var(--muted)';
+  status.textContent = 'Saving schedule...';
+
+  try {
+    var body = { amount: parseFloat(amount), day: parseInt(day), start_date: startDate };
+    if (endDate) body.end_date = endDate;
+    if (buyPrice) body.buy_price = parseFloat(buyPrice);
+
+    await fetch('/api/investment/' + invId + '/schedule', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+
+    status.style.color = 'var(--green)';
+    status.textContent = 'Schedule saved! Entries will auto-generate each time you open the app.';
+    await loadPortfolio();
+    renderScheduleList();
+    loadHistorical();
+  } catch(e) {
+    status.style.color = 'var(--red)';
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function submitRecurring() {
+  var sel = document.getElementById('recurInvestment');
+  var invId = sel.value;
+  if (!invId) return;
+
+  var amount = document.getElementById('recurAmount').value;
+  var day = document.getElementById('recurDay').value;
+  var startDate = document.getElementById('recurStart').value;
+  var endDate = document.getElementById('recurEnd').value;
+  var buyPrice = document.getElementById('recurBuyPrice').value;
+
+  if (!amount || !startDate) {
+    alert('Amount and start date are required');
+    return;
+  }
+
+  var btn = document.getElementById('recurBtn');
+  var status = document.getElementById('recurStatus');
+  btn.innerHTML = '<span class="spinner"></span> Generating...';
+  btn.disabled = true;
+  status.style.display = 'block';
+  status.style.color = 'var(--muted)';
+  status.textContent = 'Generating entries...';
+
+  try {
+    var body = { amount: parseFloat(amount), day: parseInt(day), start_date: startDate };
+    if (endDate) body.end_date = endDate;
+    if (buyPrice) body.buy_price = parseFloat(buyPrice);
+
+    var resp = await fetch('/api/investment/' + invId + '/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    var data = await resp.json();
+
+    if (data.status === 'ok') {
+      status.style.color = 'var(--green)';
+      status.textContent = data.message;
+    } else {
+      status.style.color = 'var(--red)';
+      status.textContent = data.message || 'Error generating entries';
+    }
+  } catch(e) {
+    status.style.color = 'var(--red)';
+    status.textContent = 'Error: ' + e.message;
+  }
+
+  btn.textContent = 'Generate Past Entries';
+  btn.disabled = false;
+
+  await loadPortfolio();
+  renderScheduleList();
   loadHistorical();
 }
 

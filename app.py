@@ -3,10 +3,12 @@ import uuid
 import os
 import csv
 import io
+import re
 import subprocess
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import requests as req
+import pdfplumber
 from flask import Flask, render_template, jsonify, request
 
 app = Flask(__name__)
@@ -261,6 +263,66 @@ def get_inflation_data():
     return None
 
 
+def auto_generate_scheduled():
+    """Auto-generate pending recurring entries for all investments with schedules."""
+    portfolio = load_portfolio()
+    investments = portfolio.get("investments", [])
+    changed = False
+
+    for inv in investments:
+        schedule = inv.get("schedule")
+        if not schedule:
+            continue
+
+        amount = float(schedule["amount"])
+        day = int(schedule.get("day", 1))
+        start = datetime.strptime(schedule["start_date"], "%Y-%m-%d")
+        end_str = schedule.get("end_date")
+        end = datetime.strptime(end_str, "%Y-%m-%d") if end_str else datetime.now()
+        inv_type = inv["type"]
+
+        current = start.replace(day=min(day, 28))
+        while current <= end:
+            date_str = current.strftime("%Y-%m-%d")
+
+            if inv_type == "pf":
+                existing_dates = {c["date"] for c in inv.get("contributions", [])}
+                if date_str not in existing_dates:
+                    inv.setdefault("contributions", []).append({
+                        "id": str(uuid.uuid4())[:8],
+                        "date": date_str,
+                        "amount": str(amount),
+                    })
+                    changed = True
+            else:
+                existing_dates = {t["date"] for t in inv.get("transactions", [])}
+                if date_str not in existing_dates:
+                    buy_price = schedule.get("buy_price")
+                    if buy_price:
+                        qty = amount / float(buy_price)
+                        inv.setdefault("transactions", []).append({
+                            "id": str(uuid.uuid4())[:8],
+                            "date": date_str,
+                            "quantity": str(round(qty, 4)),
+                            "buy_price": str(buy_price),
+                        })
+                    else:
+                        inv.setdefault("transactions", []).append({
+                            "id": str(uuid.uuid4())[:8],
+                            "date": date_str,
+                            "quantity": "0",
+                            "buy_price": str(amount),
+                        })
+                    changed = True
+
+            current += relativedelta(months=1)
+
+    if changed:
+        save_portfolio(portfolio)
+
+    return changed
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -268,6 +330,9 @@ def index():
 
 @app.route("/api/portfolio")
 def get_portfolio():
+    # Auto-generate any pending scheduled entries
+    auto_generate_scheduled()
+
     portfolio = load_portfolio()
     investments = portfolio.get("investments", [])
     results = []
@@ -940,6 +1005,217 @@ def import_csv():
         "imported": imported_count,
         "skipped": skipped_count,
         "message": msg,
+    })
+
+
+@app.route("/api/import/pf", methods=["POST"])
+def import_pf():
+    """Import PF contributions from EPFO passbook PDFs."""
+    if "file" not in request.files:
+        return jsonify({"status": "error", "message": "No file uploaded"}), 400
+
+    files = request.files.getlist("file")
+    portfolio = load_portfolio()
+    investments = portfolio.get("investments", [])
+
+    # Find or create PF investment
+    pf_inv = None
+    for inv in investments:
+        if inv["type"] == "pf":
+            pf_inv = inv
+            break
+
+    total_imported = 0
+    total_skipped = 0
+    detected_rate = None
+
+    for file in files:
+        pdf = pdfplumber.open(file)
+        for page_num, page in enumerate(pdf.pages):
+            tables = page.extract_tables()
+            if not tables:
+                continue
+            table = tables[0]
+
+            for row in table:
+                if not row or not row[0]:
+                    continue
+                # Contribution rows have date in DD-MM-YYYY format in column 1
+                # and 'CR' in column 2
+                if len(row) >= 9 and row[2] == 'CR' and row[1]:
+                    try:
+                        txn_date = datetime.strptime(row[1], "%d-%m-%Y").strftime("%Y-%m-%d")
+                    except (ValueError, TypeError):
+                        continue
+
+                    # Parse employee + employer contribution
+                    try:
+                        employee = float(row[6].replace(",", "")) if row[6] else 0
+                        employer = float(row[7].replace(",", "")) if row[7] else 0
+                    except (ValueError, TypeError):
+                        continue
+
+                    amount = employee + employer
+                    if amount <= 0:
+                        continue
+
+                    # Create PF investment if it doesn't exist
+                    if pf_inv is None:
+                        pf_inv = {
+                            "id": str(uuid.uuid4())[:8],
+                            "type": "pf",
+                            "name": "Provident Fund (EPF)",
+                            "category": "pf",
+                            "interest_rate": "8.25",
+                            "contributions": [],
+                        }
+                        investments.append(pf_inv)
+
+                    # Duplicate detection by date
+                    existing_dates = {c["date"] for c in pf_inv.get("contributions", [])}
+                    if txn_date in existing_dates:
+                        total_skipped += 1
+                        continue
+
+                    pf_inv.setdefault("contributions", []).append({
+                        "id": str(uuid.uuid4())[:8],
+                        "date": txn_date,
+                        "amount": str(amount),
+                    })
+                    total_imported += 1
+
+                # Try to detect interest rate from interest row
+                if row[0] and "Int. Updated" in str(row[0]) and len(row) >= 7:
+                    try:
+                        employee_int = float(row[6].replace(",", "")) if row[6] else 0
+                        if employee_int > 0 and pf_inv:
+                            # Store the interest info but don't change rate automatically
+                            pass
+                    except (ValueError, TypeError):
+                        pass
+
+    portfolio["investments"] = investments
+    save_portfolio(portfolio)
+
+    msg = "Imported {} PF contributions".format(total_imported)
+    if total_skipped:
+        msg += ", skipped {} duplicates".format(total_skipped)
+
+    return jsonify({
+        "status": "ok",
+        "imported": total_imported,
+        "skipped": total_skipped,
+        "message": msg,
+    })
+
+
+@app.route("/api/investment/<inv_id>/schedule", methods=["POST"])
+def set_schedule(inv_id):
+    """Set up a recurring schedule for an investment (SIP or PF contributions)."""
+    data = request.json
+    portfolio = load_portfolio()
+    inv = None
+    for i in portfolio.get("investments", []):
+        if i["id"] == inv_id:
+            inv = i
+            break
+    if not inv:
+        return jsonify({"status": "error", "message": "Investment not found"}), 404
+
+    inv["schedule"] = {
+        "amount": data["amount"],
+        "day": int(data.get("day", 1)),
+        "frequency": data.get("frequency", "monthly"),
+        "start_date": data["start_date"],
+        "end_date": data.get("end_date"),  # None = ongoing
+    }
+
+    save_portfolio(portfolio)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/investment/<inv_id>/schedule", methods=["DELETE"])
+def delete_schedule(inv_id):
+    """Remove recurring schedule from an investment."""
+    portfolio = load_portfolio()
+    for inv in portfolio.get("investments", []):
+        if inv["id"] == inv_id:
+            inv.pop("schedule", None)
+            save_portfolio(portfolio)
+            return jsonify({"status": "ok"})
+    return jsonify({"status": "error", "message": "Investment not found"}), 404
+
+
+@app.route("/api/investment/<inv_id>/generate", methods=["POST"])
+def generate_recurring(inv_id):
+    """Generate recurring contributions/transactions from schedule or custom params."""
+    data = request.json
+    portfolio = load_portfolio()
+    inv = None
+    for i in portfolio.get("investments", []):
+        if i["id"] == inv_id:
+            inv = i
+            break
+    if not inv:
+        return jsonify({"status": "error", "message": "Investment not found"}), 404
+
+    amount = float(data["amount"])
+    day = int(data.get("day", 1))
+    start_date = datetime.strptime(data["start_date"], "%Y-%m-%d")
+    end_date_str = data.get("end_date")
+    end_date = datetime.strptime(end_date_str, "%Y-%m-%d") if end_date_str else datetime.now()
+    buy_price = data.get("buy_price")  # For SIPs — price per unit at time of purchase
+
+    inv_type = inv["type"]
+    generated = 0
+    skipped = 0
+
+    current = start_date.replace(day=min(day, 28))
+    while current <= end_date:
+        date_str = current.strftime("%Y-%m-%d")
+
+        if inv_type == "pf":
+            existing_dates = {c["date"] for c in inv.get("contributions", [])}
+            if date_str in existing_dates:
+                skipped += 1
+            else:
+                inv.setdefault("contributions", []).append({
+                    "id": str(uuid.uuid4())[:8],
+                    "date": date_str,
+                    "amount": str(amount),
+                })
+                generated += 1
+        else:
+            # Market investments (SIP) — amount is total invested, need price
+            existing_dates = {t["date"] for t in inv.get("transactions", [])}
+            if date_str in existing_dates:
+                skipped += 1
+            else:
+                if buy_price:
+                    qty = amount / float(buy_price)
+                    inv.setdefault("transactions", []).append({
+                        "id": str(uuid.uuid4())[:8],
+                        "date": date_str,
+                        "quantity": str(round(qty, 4)),
+                        "buy_price": str(buy_price),
+                    })
+                else:
+                    inv.setdefault("transactions", []).append({
+                        "id": str(uuid.uuid4())[:8],
+                        "date": date_str,
+                        "quantity": "0",
+                        "buy_price": str(amount),
+                    })
+                generated += 1
+
+        current += relativedelta(months=1)
+
+    save_portfolio(portfolio)
+    return jsonify({
+        "status": "ok",
+        "generated": generated,
+        "skipped": skipped,
+        "message": "Generated {} entries, skipped {} duplicates".format(generated, skipped),
     })
 
 

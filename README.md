@@ -18,7 +18,9 @@ Track stocks, ETFs, gold ETFs, mutual funds, crypto, Provident Fund contribution
 
 ### Portfolio Dashboard
 - Total portfolio value, total invested, and gain/loss summary
-- Pie chart breakdown by asset category and within asset category
+- Allocation breakdown with two views:
+  - **Category** — Equity, Debt, Commodities, Crypto (click a section to drill down)
+  - **Detailed** — Stocks, ETFs, Mutual Funds, Gold ETFs, Crypto, PF, FD
 - Filter investments by **Current / Past / All**
 - Manual price refresh
 - INR default with USD conversion toggle
@@ -27,14 +29,25 @@ Track stocks, ETFs, gold ETFs, mutual funds, crypto, Provident Fund contribution
 - **Portfolio Value** — Two-line chart showing portfolio value vs amount invested over time, making profit/loss visible at a glance
 - **Returns %** — Percentage return over time with a 0% baseline
 - **Current Holdings** — What your current holdings would have been worth historically (backwards projection)
-- **Inflation adjustment** toggle using World Bank India CPI data (with extrapolation for recent years)
+- **Inflation adjustment** toggle using World Bank India CPI data (with monthly interpolation and extrapolation for recent years)
 
 ### Import
-- Import Zerodha tradebook CSVs (both EQ and MF segments)
-- Auto-classifies stocks vs ETFs vs gold ETFs
-- Resolves mutual fund ISINs via AMFI data
-- Duplicate trade detection using Zerodha trade IDs
-- Multi-file upload support
+- **Zerodha Tradebook** — Import CSV files (both EQ and MF segments)
+  - Auto-classifies stocks vs ETFs vs gold ETFs
+  - Resolves mutual fund ISINs via AMFI data
+  - Duplicate trade detection using Zerodha trade IDs
+  - Multi-file upload support
+- **EPFO Passbook** — Import PF contribution PDFs downloaded from the EPFO Member Portal
+  - Extracts monthly employee + employer contributions
+  - Creates/merges into existing PF investment
+  - Duplicate detection by date
+
+### Recurring Investments
+- Set up recurring schedules for SIPs and PF contributions
+- Schedules auto-generate entries each time you open the app
+- **Bulk generate past entries** — backfill months of SIP/PF contributions in one click (e.g., "₹5,000/month on the 15th from Jan 2024")
+- View, edit, and delete active schedules from the Recurring modal
+- Investments with active schedules show a **recurring** badge
 
 ### Investment Management
 - Add investments manually with ticker/fund search
@@ -42,6 +55,7 @@ Track stocks, ETFs, gold ETFs, mutual funds, crypto, Provident Fund contribution
 - Add, edit, and delete individual transactions
 - Edit investment-level details (name, type, ticker)
 - Transactions sorted newest-first
+- Matured FDs automatically excluded from portfolio totals
 
 ## Tech Stack
 
@@ -65,8 +79,8 @@ Track stocks, ETFs, gold ETFs, mutual funds, crypto, Provident Fund contribution
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/portfolio-tracker.git
-cd portfolio-tracker
+git clone https://github.com/inesane/investment-portfolio-tracker.git
+cd investment-portfolio-tracker
 
 # Install dependencies
 pip install -r requirements.txt
@@ -75,14 +89,28 @@ pip install -r requirements.txt
 python3 app.py
 ```
 
-The app runs at `http://localhost:5000`.
+The app runs at `http://localhost:5050`.
 
-### Importing Zerodha Trades
+### Importing Data
 
+**Zerodha Trades:**
 1. Download your tradebook(s) from Zerodha Console (separate CSVs for EQ and MF segments; tradebooks have 365 day limits so you'll need to download multiple)
-2. Click the **Import** button in the app
+2. Click **Import** in the app, select "Zerodha Tradebook (CSV)"
 3. Select one or more CSV files and import
 4. Duplicates are automatically skipped based on trade IDs
+
+**EPFO Provident Fund:**
+1. Download your passbook PDF(s) from the [EPFO Member Portal](https://passbook.epfindia.gov.in/MemberPassBook/Login)
+2. Click **Import** in the app, select "EPFO Passbook (PDF)"
+3. Select one or more PDF files and import
+4. Contributions (employee + employer) are extracted and merged
+
+### Setting Up Recurring Investments
+
+1. Click the **Recurring** button in the header
+2. Select an investment, set amount, day of month, and start date
+3. Click **"Save as Recurring"** to auto-generate future entries on each app load
+4. Or click **"Generate Past Entries"** for a one-time backfill
 
 ## Data Storage
 
@@ -90,12 +118,10 @@ All portfolio data is stored locally in `portfolio.json`. No data is sent to any
 
 ## Future Plans
 
-- **Automated SIP tracking** — Define SIP schedules (amount, frequency, date, start date) and auto-generate recurring transactions
-- **PF auto-contributions** — Set up monthly PF contribution schedules that automatically add entries each month
 - **Benchmarking** — Compare portfolio returns against Nifty 50, Sensex, or other indices
 - **XIRR calculation** — Annualized returns accounting for irregular cash flows
 - **Asset rebalancing suggestions** — Target allocation vs actual allocation with rebalance recommendations
 - **Export** — Download portfolio data as CSV/Excel
 - **Graph Filters** - More filters on graphs to view performance over the past year, month, etc.
-- **More Investments** - Real Estates, US investments (most probably in a separate sheet/tab)
+- **More Investments** - Real estate, US investments (most probably in a separate sheet/tab)
 - **Dividend tracking** — Record and track dividend income from stocks and mutual funds
