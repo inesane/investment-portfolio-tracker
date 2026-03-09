@@ -1,4 +1,4 @@
-# Local Portfolio Tracker
+# Local Investment Portfolio Tracker
 
 A local, self-hosted portfolio tracker for Indian investors that don't want online portfolio trackers to sell their financial data.
 
