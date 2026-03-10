@@ -204,7 +204,7 @@
         <thead>
           <tr>
             <th>Name</th><th>Type</th><th>Qty / Principal</th><th>Invested</th>
-            <th>Current Value</th><th>Gain/Loss</th><th>Actions</th>
+            <th>Current Value</th><th>Gain/Loss</th><th style="text-align:right;">Actions</th>
           </tr>
         </thead>
         <tbody id="invBody"></tbody>
@@ -799,7 +799,7 @@ function renderTable(investments) {
       <td>${fmtDetailed(inv.invested)}</td>
       <td>${fmtDetailed(inv.current_value)}</td>
       <td class="${glClass}">${fmtDetailed(gl)} (${glPct >= 0 ? '+' : ''}${glPct}%)</td>
-      <td>
+      <td style="white-space:nowrap;text-align:right;">
         ${inv.type !== 'fd' ? `<button class="btn btn-sm" onclick="event.stopPropagation();openTxnModal('${inv.id}','${inv.type}','${inv.name}')">+ Add</button>` : ''}
         <button class="btn btn-sm" onclick="event.stopPropagation();openEditInvModal('${inv.id}')">Edit</button>
         <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteInvestment('${inv.id}')">Del</button>

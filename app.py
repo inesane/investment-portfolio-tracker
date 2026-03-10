@@ -822,6 +822,7 @@ def historical():
             return None
 
         # Collect all cash flows: (date, amount) for each investment
+        # For zero-cost acquisitions, use market value at acquisition date
         cash_flows = []
         for inv in investments:
             inv_type = inv["type"]
@@ -831,8 +832,24 @@ def historical():
                 for c in inv.get("contributions", []):
                     cash_flows.append((c["date"], float(c["amount"])))
             else:
+                inv_prices = hist_prices.get(inv["id"], {})
                 for t in inv.get("transactions", []):
-                    amt = float(t["quantity"]) * float(t["buy_price"])
+                    qty = float(t["quantity"])
+                    buy_price = float(t["buy_price"])
+                    if buy_price > 0:
+                        amt = qty * buy_price
+                    elif qty > 0 and inv_prices:
+                        # Zero-cost acquisition: use market value at acquisition date
+                        t_dt = datetime.strptime(t["date"], "%Y-%m-%d")
+                        mkt_price = None
+                        for offset in range(7):
+                            check = (t_dt - timedelta(days=offset)).strftime("%Y-%m-%d")
+                            if check in inv_prices:
+                                mkt_price = inv_prices[check]
+                                break
+                        amt = qty * mkt_price if mkt_price else 0
+                    else:
+                        amt = 0
                     cash_flows.append((t["date"], amt))
 
         # Sort cash flows by date
