@@ -17,7 +17,7 @@ Track stocks, mutual funds, commodities, crypto, Provident Fund contributions, a
 - **Fixed Deposits** — Principal, rate, tenor with monthly/quarterly/half-yearly/yearly compounding options
 
 ### Portfolio Dashboard
-- Total portfolio value, total invested, and gain/loss summary
+- Total portfolio value, total invested, gain/loss summary, and **XIRR** (annualized return accounting for irregular cash flows)
 - Allocation breakdown with two views:
   - **Category** — Equity, Debt, Commodities, Crypto (click a section to drill down)
   - **Detailed** — Stocks, ETFs, Mutual Funds, Gold ETFs, Crypto, PF, FD
@@ -121,7 +121,6 @@ All portfolio data is stored locally in `portfolio.json`. No data is sent to any
 
 ## Future Plans
 
-- **XIRR calculation** — Annualized returns accounting for irregular cash flows
 - **Asset rebalancing suggestions** — Target allocation vs actual allocation with rebalance recommendations
 - **Export** — Download portfolio data as CSV/Excel
 - **Graph Filters** - More filters on graphs to view performance over the past year, month, etc.

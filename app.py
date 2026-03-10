@@ -323,6 +323,42 @@ def auto_generate_scheduled():
     return changed
 
 
+def calculate_xirr(cash_flows):
+    """Calculate XIRR given a list of (date_string, amount) tuples.
+    Negative amounts = money going out (investments), positive = money coming in (current value).
+    Returns annualized return as a decimal (e.g. 0.12 for 12%), or None if it can't converge."""
+    if not cash_flows or len(cash_flows) < 2:
+        return None
+    # Parse dates and amounts
+    flows = []
+    for date_str, amount in cash_flows:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        flows.append((dt, float(amount)))
+    flows.sort(key=lambda x: x[0])
+    d0 = flows[0][0]
+    # Newton's method to find rate where NPV = 0
+    def npv(rate):
+        return sum(amt / ((1 + rate) ** ((dt - d0).days / 365.25)) for dt, amt in flows)
+    def dnpv(rate):
+        return sum(-((dt - d0).days / 365.25) * amt / ((1 + rate) ** ((dt - d0).days / 365.25 + 1)) for dt, amt in flows)
+    rate = 0.1  # initial guess
+    for _ in range(200):
+        n = npv(rate)
+        d = dnpv(rate)
+        if abs(d) < 1e-12:
+            break
+        new_rate = rate - n / d
+        # Clamp to avoid divergence
+        new_rate = max(new_rate, -0.99)
+        if abs(new_rate - rate) < 1e-9:
+            return round(new_rate * 100, 2)
+        rate = new_rate
+    # Check if it converged
+    if abs(npv(rate)) < 1.0:
+        return round(rate * 100, 2)
+    return None
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -377,6 +413,33 @@ def get_portfolio():
         total_invested += item["invested"]
         results.append(item)
 
+    # Calculate portfolio XIRR
+    today = datetime.now().strftime("%Y-%m-%d")
+    xirr_flows = []
+    for inv in investments:
+        inv_type = inv["type"]
+        if inv_type == "fd":
+            current_value = calculate_fd_value(inv)
+            if current_value > 0:
+                xirr_flows.append((inv["start_date"], -float(inv["principal"])))
+                xirr_flows.append((today, current_value))
+        elif inv_type == "pf":
+            for c in inv.get("contributions", []):
+                xirr_flows.append((c["date"], -float(c["amount"])))
+            pf_val = calculate_pf_value(inv)
+            if pf_val > 0:
+                xirr_flows.append((today, pf_val))
+        else:
+            price = get_current_price(inv)
+            for t in inv.get("transactions", []):
+                amt = float(t["quantity"]) * float(t["buy_price"])
+                xirr_flows.append((t["date"], -amt))
+            total_qty = sum(float(t["quantity"]) for t in inv.get("transactions", []))
+            if price and total_qty > 0:
+                xirr_flows.append((today, price * total_qty))
+
+    xirr_val = calculate_xirr(xirr_flows) if xirr_flows else None
+
     return jsonify(
         {
             "investments": results,
@@ -386,6 +449,7 @@ def get_portfolio():
             "total_gain_loss_pct": round(
                 ((total_value - total_invested) / total_invested * 100) if total_invested else 0, 2
             ),
+            "xirr": xirr_val,
         }
     )
 

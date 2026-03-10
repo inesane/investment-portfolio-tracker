@@ -143,6 +143,7 @@
     <div class="card"><div class="card-label">Total Value</div><div class="card-value" id="totalValue">--</div></div>
     <div class="card"><div class="card-label">Total Invested</div><div class="card-value" id="totalInvested">--</div></div>
     <div class="card"><div class="card-label">Total Gain/Loss</div><div class="card-value" id="totalGainLoss">--</div><div class="card-sub" id="totalGainLossPct"></div></div>
+    <div class="card"><div class="card-label">XIRR</div><div class="card-value" id="xirrValue">--</div><div class="card-sub" style="color:var(--muted);">annualized</div></div>
   </div>
 
   <div class="charts-grid">
@@ -576,6 +577,15 @@ function renderPortfolio() {
     (d.total_gain_loss >= 0 ? '+' : '') + d.total_gain_loss_pct + '%';
   document.getElementById('totalGainLossPct').className =
     'card-sub ' + (d.total_gain_loss >= 0 ? 'positive' : 'negative');
+
+  const xirrEl = document.getElementById('xirrValue');
+  if (d.xirr !== null && d.xirr !== undefined) {
+    xirrEl.textContent = (d.xirr >= 0 ? '+' : '') + d.xirr + '%';
+    xirrEl.className = 'card-value ' + (d.xirr >= 0 ? 'positive' : 'negative');
+  } else {
+    xirrEl.textContent = '--';
+    xirrEl.className = 'card-value';
+  }
 
   renderPieChart(d.investments);
   renderTable(d.investments);
