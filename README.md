@@ -21,6 +21,7 @@ Track stocks, mutual funds, commodities, crypto, Provident Fund contributions, a
 - Allocation breakdown with two views:
   - **Category** — Equity, Debt, Commodities, Crypto (click a section to drill down)
   - **Detailed** — Stocks, ETFs, Mutual Funds, Gold ETFs, Crypto, PF, FD
+- **Historical allocation slider** — Scrub through time to see how your allocation breakdown changed week by week
 - Filter investments by **Current / Past / All**
 - Manual price refresh
 - INR default with USD conversion toggle

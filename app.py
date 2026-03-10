@@ -743,6 +743,98 @@ def historical():
     return jsonify({"dates": date_points, "values": values, "invested": invested_values})
 
 
+@app.route("/api/historical-allocation")
+def historical_allocation():
+    """Return allocation breakdown by category at each date point."""
+    portfolio = load_portfolio()
+    investments = portfolio.get("investments", [])
+
+    if not investments:
+        return jsonify({"dates": [], "allocations": {}})
+
+    now = datetime.now()
+
+    # Find earliest date across all investments
+    all_dates = []
+    for inv in investments:
+        if inv["type"] == "fd":
+            all_dates.append(inv["start_date"])
+        elif inv["type"] == "pf":
+            for c in inv.get("contributions", []):
+                all_dates.append(c["date"])
+        else:
+            for t in inv.get("transactions", []):
+                all_dates.append(t["date"])
+
+    if not all_dates:
+        return jsonify({"dates": [], "allocations": {}})
+
+    start_date = min(all_dates)
+    end_date = now.strftime("%Y-%m-%d")
+
+    # Fetch historical prices for all market investments
+    hist_prices = {}
+    for inv in investments:
+        if inv["type"] in ("stock", "etf", "gold_etf", "mutual_fund", "crypto"):
+            hist_prices[inv["id"]] = get_historical_prices(inv, start_date, end_date)
+
+    # Generate weekly date points
+    current = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    date_points = []
+    while current <= end:
+        date_points.append(current.strftime("%Y-%m-%d"))
+        current += timedelta(days=7)
+    if date_points and date_points[-1] != end_date:
+        date_points.append(end_date)
+
+    # Track values per category at each date point
+    categories = set()
+    # Initialize: list of dicts, one per date point
+    alloc_per_date = [{} for _ in date_points]
+
+    for dp_idx, dp in enumerate(date_points):
+        dp_dt = datetime.strptime(dp, "%Y-%m-%d")
+
+        for inv in investments:
+            inv_type = inv["type"]
+            cat = inv.get("category", inv_type)
+            val = 0
+
+            if inv_type == "fd":
+                start = datetime.strptime(inv["start_date"], "%Y-%m-%d")
+                if dp_dt >= start:
+                    val = calculate_fd_value(inv, dp)
+            elif inv_type == "pf":
+                val = calculate_pf_value(inv, dp)
+            else:
+                transactions = inv.get("transactions", [])
+                prices = hist_prices.get(inv["id"], {})
+
+                price = None
+                for offset in range(7):
+                    check_date = (dp_dt - timedelta(days=offset)).strftime("%Y-%m-%d")
+                    if check_date in prices:
+                        price = prices[check_date]
+                        break
+
+                if price is not None:
+                    active_txns = [t for t in transactions if t["date"] <= dp]
+                    qty = sum(float(t["quantity"]) for t in active_txns)
+                    val = price * qty
+
+            if val > 0:
+                categories.add(cat)
+                alloc_per_date[dp_idx][cat] = alloc_per_date[dp_idx].get(cat, 0) + val
+
+    # Build response: allocations keyed by category, each a list parallel to dates
+    allocations = {}
+    for cat in categories:
+        allocations[cat] = [round(alloc_per_date[i].get(cat, 0), 2) for i in range(len(date_points))]
+
+    return jsonify({"dates": date_points, "allocations": allocations})
+
+
 @app.route("/api/search/stock")
 def search_stock():
     q = request.args.get("q", "")

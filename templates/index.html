@@ -156,6 +156,13 @@
       </div>
       <canvas id="pieChart"></canvas>
       <button id="pieBackBtn" style="display:none;margin-top:8px;background:var(--surface);color:var(--muted);border:1px solid var(--border);padding:4px 12px;cursor:pointer;font-size:0.8rem;border-radius:4px;" onclick="pieDrillBack()">&larr; Back to Categories</button>
+      <div id="timeSliderContainer" style="margin-top:12px;display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <span style="font-size:0.75rem;color:var(--muted);">View allocation over time</span>
+          <span id="timeSliderLabel" style="font-size:0.75rem;font-weight:600;color:var(--text);"></span>
+        </div>
+        <input type="range" id="timeSlider" min="0" max="100" value="100" style="width:100%;accent-color:#3b82f6;cursor:pointer;">
+      </div>
     </div>
     <div class="chart-card" style="position:relative;">
       <h3>Portfolio History</h3>
@@ -515,6 +522,8 @@ const BROAD_CATEGORY_COLORS = {
 let allocView = 'category';
 let _lastPieInvestments = [];
 let pieDrillCategory = null;
+let _histAllocData = null;
+let _histAllocLoading = false;
 
 function fmt(val) {
   if (currency === 'USD') val = val / usdRate;
@@ -542,6 +551,7 @@ async function loadPortfolio() {
   const resp = await fetch('/api/portfolio');
   portfolioData = await resp.json();
   renderPortfolio();
+  loadHistoricalAllocation();
 }
 
 function renderPortfolio() {
@@ -566,8 +576,8 @@ function renderPortfolio() {
 const DETAILED_ORDER = ['stock', 'etf', 'mutual_fund', 'gold_etf', 'crypto', 'pf', 'fd'];
 const CATEGORY_ORDER = ['equity', 'commodities', 'crypto', 'debt'];
 
-function renderPieChart(investments) {
-  _lastPieInvestments = investments;
+function renderPieChart(investments, isHistorical) {
+  if (!isHistorical) _lastPieInvestments = investments;
   const totals = {};
   let labelMap, colorMap, order, isDrillDown = false;
 
@@ -657,8 +667,60 @@ function setAllocView(view, btn) {
   pieDrillCategory = null;
   btn.parentElement.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  renderPieChart(_lastPieInvestments);
+  const slider = document.getElementById('timeSlider');
+  if (slider.value == slider.max) {
+    renderPieChart(_lastPieInvestments);
+  } else {
+    renderPieChartForDate(parseInt(slider.value));
+  }
 }
+
+async function loadHistoricalAllocation() {
+  if (_histAllocData || _histAllocLoading) return;
+  _histAllocLoading = true;
+  try {
+    const resp = await fetch('/api/historical-allocation');
+    _histAllocData = await resp.json();
+    const container = document.getElementById('timeSliderContainer');
+    const slider = document.getElementById('timeSlider');
+    if (_histAllocData.dates && _histAllocData.dates.length > 1) {
+      slider.max = _histAllocData.dates.length - 1;
+      slider.value = slider.max;
+      container.style.display = '';
+      document.getElementById('timeSliderLabel').textContent = 'Today';
+    }
+  } catch(e) {
+    console.error('Error loading historical allocation:', e);
+  }
+  _histAllocLoading = false;
+}
+
+function renderPieChartForDate(dateIdx) {
+  if (!_histAllocData) return;
+  const alloc = _histAllocData.allocations;
+  // Build synthetic investments array from allocation data at this date index
+  const investments = [];
+  for (const cat of Object.keys(alloc)) {
+    const val = alloc[cat][dateIdx] || 0;
+    if (val > 0) {
+      investments.push({ category: cat, type: cat, current_value: val });
+    }
+  }
+  renderPieChart(investments, true);
+}
+
+document.getElementById('timeSlider').addEventListener('input', function() {
+  const idx = parseInt(this.value);
+  const label = document.getElementById('timeSliderLabel');
+  if (idx == this.max) {
+    label.textContent = 'Today';
+    renderPieChart(_lastPieInvestments);
+  } else if (_histAllocData && _histAllocData.dates) {
+    const d = _histAllocData.dates[idx];
+    label.textContent = new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+    renderPieChartForDate(idx);
+  }
+});
 
 function isCurrentInvestment(inv) {
   if (inv.type === 'fd') {
@@ -945,6 +1007,7 @@ async function refreshPrices() {
   btn.innerHTML = '<span class="spinner"></span> Refreshing...';
   btn.disabled = true;
   await fetch('/api/refresh', { method: 'POST' });
+  _histAllocData = null;
   await loadPortfolio();
   await loadHistorical();
   btn.textContent = 'Refresh Prices';
