@@ -122,7 +122,6 @@ All portfolio data is stored locally in `portfolio.json`. No data is sent to any
 
 ## Future Plans
 
-- **Asset rebalancing suggestions** — Target allocation vs actual allocation with rebalance recommendations
+- **Asset rebalancing suggestions** — Target allocation vs actual allocation with rebalance recommendations. Ideal CAGR for selected investments.
 - **Export** — Download portfolio data as CSV/Excel
-- **Graph Filters** - More filters on graphs to view performance over the past year, month, etc.
 - **More Investments** - Real estate, US investments (most probably in a separate sheet/tab)
