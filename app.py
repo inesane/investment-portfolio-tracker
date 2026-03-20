@@ -883,6 +883,7 @@ def historical():
             if price and price > 0 and cf_amount > 0:
                 nifty_units.append((cf_date, cf_amount / price))
 
+        # Portfolio Value / Returns benchmark: "what if every rupee invested went into Nifty 50?"
         # For each date point, sum units accumulated so far × current Nifty price
         benchmark_values = []
         cf_idx = 0

@@ -34,6 +34,7 @@ Track stocks, mutual funds, commodities, crypto, Provident Fund contributions, a
 - **Nifty 50 benchmark** toggle — overlay Nifty 50 performance on any chart view to compare against the index
 - **Amount Invested** toggle — optionally show/hide the invested amount line
 - **Inflation adjustment** toggle using World Bank India CPI data (with monthly interpolation and extrapolation for recent years)
+- **Time range filters** — 1M, 3M, 6M, 1Y, 3Y, 5Y, and MAX to zoom into any period (defaults to MAX)
 
 ### Import
 - **Zerodha Tradebook** — Import CSV files (both EQ and MF segments)
